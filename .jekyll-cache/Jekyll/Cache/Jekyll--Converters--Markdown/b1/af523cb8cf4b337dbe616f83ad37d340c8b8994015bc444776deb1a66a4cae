@@ -1,0 +1,103 @@
+I"�&<p>In this post, I’m going to show you how to automatically send an email every day containing a randomly selected photo and inspirational quote(the quote of the day from BrainyQuote). This works really well for family photos or friend groups. I’ve found this to be one of the best gifts as unlike most gifts it can’t be put away in a closet and forgotten about. In addition, it makes good use of those millions of photos and reminds the family or friends of fun times and memories.</p>
+
+<p>We will do this using a Raspberry Pi and Python. We will use Beauitful Soup(bs4) and requests to get the quotes, smtplib and email to send the email, and os and random to get the random images.</p>
+
+<p>Let’s begin by setting up our directory on the rpi.</p>
+
+<p><code class="language-plaintext highlighter-rouge">mkdir dailyPhotos</code></p>
+
+<p>First, find a couple hundred photos that you would like to use. You then need to transfer these photo into a directory on your rpi.</p>
+
+<p>I’ll show you one method that works if you are using ssh but there are definitely other ways such as using dropbox or a usb stick.</p>
+
+<p>This method will only work if ssh is enabled on your rpi.</p>
+
+<p>Firstly, on your computer, create a directory with your photos. Then create a zip of the directory that contains the photos. You can usually do this by left-clicking on the directory.</p>
+
+<p>Now, we’re going to transfer the zip file from your computer to the rpi using scp.</p>
+
+<p>Run this on your computer:</p>
+
+<p><code class="language-plaintext highlighter-rouge">scp path_to_pics.zip pi@raspberrypi.local:/home/pi/dailyPhotos</code></p>
+
+<p>Now, unzip the zip file using</p>
+
+<p><code class="language-plaintext highlighter-rouge">unzip pics.zip</code></p>
+
+<p>You should now have your photos on your rpi!</p>
+
+<p>Now, we will setup the code to actually do the emailing.</p>
+
+<p>Open a blank file using <code class="language-plaintext highlighter-rouge">nano script.py</code></p>
+
+<p>Now copy in the following script.
+Be sure to change the emails and password.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">bs4</span> <span class="kn">import</span> <span class="n">BeautifulSoup</span>
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">import</span> <span class="nn">smtplib</span>
+<span class="kn">import</span> <span class="nn">email</span>
+<span class="kn">from</span> <span class="nn">email.mime.image</span> <span class="kn">import</span> <span class="n">MIMEImage</span>
+<span class="kn">from</span> <span class="nn">email.mime.multipart</span> <span class="kn">import</span> <span class="n">MIMEMultipart</span>
+<span class="kn">from</span> <span class="nn">email.mime.text</span> <span class="kn">import</span> <span class="n">MIMEText</span>
+<span class="kn">from</span> <span class="nn">email.mime.base</span> <span class="kn">import</span> <span class="n">MIMEBase</span>
+<span class="kn">import</span> <span class="nn">random</span>
+
+<span class="c1">###EDIT THIS###
+</span><span class="n">recipients</span> <span class="o">=</span> <span class="p">{</span><span class="s">"sample.email@gmail.com"</span><span class="p">,</span> <span class="s">"sample123@gmail.com"</span><span class="p">}</span>
+<span class="n">sender</span> <span class="o">=</span> <span class="s">"sample1234@gmail.com"</span>
+<span class="n">senderPass</span> <span class="o">=</span> <span class="s">"password"</span>
+<span class="n">emailHost</span> <span class="o">=</span> <span class="s">"smtp.gmail.com"</span>
+<span class="c1">##for yahoo change to "smtp.mail.yahoo.com"
+###############
+</span>
+<span class="c1">#create email
+</span><span class="n">msg</span> <span class="o">=</span> <span class="n">MIMEMultipart</span><span class="p">()</span>
+<span class="n">msg</span><span class="p">[</span><span class="s">'Subject'</span><span class="p">]</span> <span class="o">=</span> <span class="s">'Photo of the Day'</span>
+<span class="n">msg</span><span class="p">[</span><span class="s">'From'</span><span class="p">]</span> <span class="o">=</span> <span class="n">sender</span>
+<span class="c1">#seperate emails with commas but make one string
+</span><span class="n">msg</span><span class="p">[</span><span class="s">'To'</span><span class="p">]</span> <span class="o">=</span> <span class="s">", "</span><span class="p">.</span><span class="n">join</span><span class="p">(</span><span class="n">recipients</span><span class="p">)</span>
+
+<span class="c1">#choose random photo and add to email
+</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/home/pi/dailyPhotos/pics"</span>
+<span class="n">files</span> <span class="o">=</span> <span class="n">os</span><span class="p">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="n">index</span> <span class="o">=</span> <span class="n">random</span><span class="p">.</span><span class="n">randrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">))</span>
+<span class="n">fp</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="o">+</span><span class="s">"/"</span><span class="o">+</span><span class="n">files</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="s">'rb'</span><span class="p">)</span>
+<span class="n">img</span> <span class="o">=</span> <span class="n">MIMEImage</span><span class="p">(</span><span class="n">fp</span><span class="p">.</span><span class="n">read</span><span class="p">())</span>
+<span class="n">msg</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+
+<span class="c1">#find quote
+</span><span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="p">.</span><span class="n">Session</span><span class="p">().</span><span class="n">get</span><span class="p">(</span><span class="s">'https://www.brainyquote.com/quote_of_the_day'</span><span class="p">)</span>
+<span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">r</span><span class="p">.</span><span class="n">text</span><span class="p">,</span> <span class="s">'html.parser'</span><span class="p">)</span>
+<span class="n">l</span> <span class="o">=</span> <span class="s">"</span><span class="se">\n\n</span><span class="s">"</span><span class="o">+</span><span class="n">soup</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="s">"meta"</span><span class="p">,</span> <span class="p">{</span><span class="s">"name"</span><span class="p">:</span> <span class="s">"twitter:description"</span><span class="p">})[</span><span class="s">'content'</span><span class="p">]</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">MIMEText</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+<span class="n">msg</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+
+<span class="c1">#send email
+</span><span class="n">s</span> <span class="o">=</span> <span class="n">smtplib</span><span class="p">.</span><span class="n">SMTP</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">emailHost</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">587</span><span class="p">)</span>
+<span class="n">s</span><span class="p">.</span><span class="n">starttls</span><span class="p">()</span>
+<span class="n">s</span><span class="p">.</span><span class="n">login</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">senderPass</span><span class="p">)</span>
+<span class="n">s</span><span class="p">.</span><span class="n">sendmail</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">msg</span><span class="p">.</span><span class="n">as_string</span><span class="p">())</span>
+
+
+</code></pre></div></div>
+<p>Now we need to install bs4(Beautiful soup)</p>
+
+<p><code class="language-plaintext highlighter-rouge">sudo apt-get install python3-bs4</code></p>
+
+<p>We can now send emails! You can test the script by running <code class="language-plaintext highlighter-rouge">python3 script.py</code></p>
+
+<p>If you get a SMTP authentication error, this means you need to log in to the sender google account and under security in the manage your account settings, turn off two-factor authentication and turn on less secure app access. 
+If you want to keep two-factor authentication, you can generate an app password but its probably easier to just create a new google account with the laxer security settings to send emails from.</p>
+
+<p>All that is left to do is to automate it so emails are sent daily. We will use crontab to do this.</p>
+
+<p>Open crontab using <code class="language-plaintext highlighter-rouge">crontab -e</code>
+At the bottom of the file, add 
+<code class="language-plaintext highlighter-rouge">12 0 * * * python3 /home/pi/dailyPhotos/script.py</code></p>
+
+<p>This will execute the command <code class="language-plaintext highlighter-rouge">python3 /home/pi/dailyPhotos/script.py</code> every day at 12:00, which means an email will be sent every day at 12!</p>
+
+<p>You may also want to check that your rpi clock is set to the right time zone to ensure you receive the emails at the correct time.</p>
+:ET
